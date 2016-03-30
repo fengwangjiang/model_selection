@@ -1,0 +1,12 @@
+.ipynb_checkpoints
+__pycache__
+.cache
+*.py[cod]
+*.swp
+*.log
+*~
+.DS_store
+results/
+tests/
+data/
+.ropeproject/
