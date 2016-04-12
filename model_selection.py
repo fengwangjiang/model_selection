@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 import numpy as np
+import matplotlib.pyplot as plt
 import os
 from sklearn.feature_selection import (f_classif, SelectKBest)
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from sklearn.svm import SVC
 from bolstered_helpers import bolstered_blobs
 from gen_data import gen_data
-import matplotlib.pyplot as plt
+from config import (initialization, data_abs_path, fig_abs_path)
 
 
 def _num_samples(x):
@@ -226,7 +227,7 @@ def ms_srm(X, y, clf):
     return (min_idx, min_idx_bolster, srs, srs_bolster)
 
 
-def _plot_risks(srs, srs_bolster, figname="srs_n_50_d_20_d0_3_better.pdf"):
+def _plot_risks(srs, srs_bolster, suptitle, figname=None):
     """Plot training error, VC-confidence, and risk
 
     :param srs:
@@ -263,24 +264,29 @@ def _plot_risks(srs, srs_bolster, figname="srs_n_50_d_20_d0_3_better.pdf"):
         # Only show ticks on the left and bottom spines
         ax.yaxis.set_ticks_position('left')
         ax.xaxis.set_ticks_position('bottom')
+    fig.suptitle(suptitle)
     fig.set_tight_layout(True)
+    if figname is None:
+        figname = "srs_n_50_d_20_d0_3_test.pdf"
     fig.savefig(figname)
     plt.close()
 
 
-def plot_ms_srm(clf_name="LDA", figname=None):
+def plot_ms_srm(n=50, d=20, d0=3, clf_name="LDA", figname=None):
     """plot risks for model selection using SRM"""
     clf = choose_clf(clf_name)
-    n = 50
-    d = 20
-    d0 = 3
     X, y = gen_data(n_samples=n, n_features=d, n_informative=d0,
                     class_sep=1.5)
     idx, idx_bolster, srs, srs_bolster = ms_srm(X, y, clf)
     if figname is None:
-        figname = "srs_clf_{clf}_n_{n}_d_{d}_d0_{d0}.pdf"
-        figname = figname.format(clf=clf_name, n=n, d=d, d0=d0)
-    _plot_risks(srs, srs_bolster, figname=figname)
+        base_name = base_name_generator(clf_name, n, d, d0)
+        figname = srs_figname_gen(base_name)
+        figname = fig_abs_path(figname)
+        #  figname = "srs_clf_{clf}_n_{n}_d_{d}_d0_{d0}.pdf"
+        #  figname = figname.format(clf=clf_name, n=n, d=d, d0=d0)
+    #  title = r"clf: {clf}, $n$={n}, $d$={d}, $d_0$={d0}"
+    #  title = title.format(clf=clf_name, n=n, d=d, d0=d0)
+    _plot_risks(srs, srs_bolster, suptitle="", figname=figname)
 
 
 def choose_clf(clf_name="LDA"):
@@ -358,6 +364,7 @@ def read_loop_ms_srm(fname=None, histplot=True, boxplot=True):
         ax.xaxis.set_ticks_position('bottom')
 
         hist_fig_name = hist_figname_gen(basename)
+        hist_fig_name = fig_abs_path(hist_fig_name)
         fig.savefig(hist_fig_name)
         plt.close()
 
@@ -381,6 +388,7 @@ def read_loop_ms_srm(fname=None, histplot=True, boxplot=True):
         ax.xaxis.set_ticks_position('bottom')
 
         box_fig_name = box_figname_gen(basename)
+        box_fig_name = fig_abs_path(box_fig_name)
         fig.savefig(box_fig_name)
         plt.close()
     return (idx_list, idx_bolster_list)
@@ -437,12 +445,14 @@ def runner(*args, **kwargs):
                           f_dict["d"], f_dict["d0"])
     base_name = base_name_generator(clf_name, n, d, d0)
     fname = txt_fname_gen(base_name)
+    fname = data_abs_path(fname)
     if not os.path.exists(fname):
         loop_ms_srm(**kwargs)
     read_loop_ms_srm(fname=fname)
 
 
 if __name__ == '__main__':
+    initialization()
     #  test_sr()
     #  srs = test_sr()
 
@@ -452,12 +462,18 @@ if __name__ == '__main__':
     #  e, e_bolster = cmp_ms_srm(clf_name="LSVM", nloop=100)
     #  print("LSVM: e = {e}\ne_bolster = {e_b}".format(e=e, e_b=e_bolster))
 
-    #  plot_ms_srm(clf_name="LDA")
-    #  plot_ms_srm(clf_name="LSVM")
+    plot_ms_srm(clf_name="LDA")
+    plot_ms_srm(clf_name="LSVM")
+    plot_ms_srm(d0=4, clf_name="LDA")
+    plot_ms_srm(d0=4, clf_name="LSVM")
+
     #  loop_ms_srm()
     #  loop_ms_srm(clf_name="LSVM")
     #  read_loop_ms_srm()
     #  read_loop_ms_srm(fname="clf_LSVM_n_50_d_20_d0_3.txt")
+
+    runner(n=50, d=20, d0=3, clf_name="LDA", nloop=100, fname=None)
+    runner(n=50, d=20, d0=3, clf_name="LSVM", nloop=100, fname=None)
     runner(n=50, d=20, d0=4, clf_name="LDA", nloop=100, fname=None)
     runner(n=50, d=20, d0=4, clf_name="LSVM", nloop=100, fname=None)
     pass
