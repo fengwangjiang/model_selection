@@ -6,6 +6,7 @@ import os
 from sklearn.feature_selection import (f_classif, SelectKBest)
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsClassifier
 from bolstered_helpers import bolstered_blobs
 from gen_data import gen_data
 from config import (initialization, data_abs_path, fig_abs_path)
@@ -122,29 +123,41 @@ def test_file_name_parser():
     print(name_dict)
 
 
-def sr(X, y, clf, k, bolster=False):
+def sr(X, y, clf_name, k, bolster=False):
     """Structural risk.
 
     :param X:
     :param y:
-    :param clf:
+    :param clf_name:
     :param k:             number of features to select
     :param bolster:
     """
+    clf = choose_clf(clf_name)
     n, d = X.shape
     ve = "Selected {k} features out of {d}.".format(k=k, d=d)
     if k > d:
         raise ValueError(ve)
     #  X_, y_ = bolstered_blobs(X, y, new_bolster=True)
     X_, y_ = bolstered_blobs(X, y, new_bolster=False)
-    selector = SelectKBest(f_classif, k=k).fit(X, y)
-    Xr = selector.transform(X)
-    X_r = selector.transform(X_)
-    clf.fit(Xr, y)
-    if bolster:
-        err = 1 - clf.score(X_r, y_)
-    else:
-        err = 1 - clf.score(Xr, y)
+    linear_clfs = ["LDA", "LSVM"]
+    if clf_name in linear_clfs:
+        vc = k
+        selector = SelectKBest(f_classif, k=k).fit(X, y)
+        Xr = selector.transform(X)
+        X_r = selector.transform(X_)
+        clf.fit(Xr, y)
+        if bolster:
+            err = 1 - clf.score(X_r, y_)
+        else:
+            err = 1 - clf.score(Xr, y)
+    elif clf_name == "KNN":
+        vc = n / k * 1 / (n ** (1 / 5))
+        clf.n_neighbors = k
+        clf.fit(X, y)
+        if bolster:
+            err = 1 - clf.score(X_, y_)
+        else:
+            err = 1 - clf.score(X, y)
     err_bar = np.mean(err)
     #  print(err_bar)
     #  vc_confidence = np.sqrt(32/n*(k*np.log(n+1)))
@@ -153,15 +166,19 @@ def sr(X, y, clf, k, bolster=False):
     #  risk = err_bar + np.sqrt(np.log(k)/n)
     #  risk = err_bar + 2 * np.log(k) / n
     #  risk = err_bar + 1 * np.log(k) / n
-    vc_confidence = 2 * np.log(k) / n
+    vc_confidence = 2 * np.log(vc) / n
     #  vc_confidence = np.sqrt(np.log(k)/n)
+    #  refer to elements of statistical learning by Hastie ebook page 241.
+    #  \sigma^2 = N/(N-d)*err_bar, NOT WORKING.
+    #  vc_confidence = 2 * k / n * n / (n-k) * err_bar
     risk = err_bar + vc_confidence
     return (err_bar, vc_confidence, risk)
 
 
 def test_sr():
     """Plot SRM, deprecated"""
-    clf = LDA()
+    #  clf = LDA()
+    clf_name = "LDA"
     n = 50
     d = 20
     d0 = 3
@@ -171,8 +188,8 @@ def test_sr():
     srs_bolster = np.zeros(shape=(d, 3))
     for i in range(d):
         k = i + 1
-        srs[i, :] = sr(X, y, clf, k, bolster=False)
-        srs_bolster[i, :] = sr(X, y, clf, k, bolster=True)
+        srs[i, :] = sr(X, y, clf_name, k, bolster=False)
+        srs_bolster[i, :] = sr(X, y, clf_name, k, bolster=True)
     min_idx = np.argmin(srs[:, 2], axis=0) + 1
     min_risk = np.min(srs[:, 2])
     min_idx_bolster = np.argmin(srs_bolster[:, 2], axis=0) + 1
@@ -212,19 +229,37 @@ def test_sr():
     #  return min_idx, min_idx_bolster
 
 
-def ms_srm(X, y, clf):
+def ms_srm(X, y, clf_name):
     """model selection using structural risk minimization"""
     X, y = check_X_y(X, y)
     n, d = X.shape
-    srs = np.zeros(shape=(d, 3))
-    srs_bolster = np.zeros(shape=(d, 3))
-    for i in range(d):
+    linear_clfs = ["LDA", "LSVM"]
+    if clf_name in linear_clfs:
+        num_ks = np.int(d/2)
+        ks = range(1, num_ks+1)
+    elif clf_name == "KNN":
+        ks = range(3, 9+1, 2)
+        num_ks = len(ks)
+    srs = np.zeros(shape=(num_ks, 3))
+    srs_bolster = np.zeros(shape=(num_ks, 3))
+    for i, k in enumerate(ks):
         k = i + 1
-        srs[i, :] = sr(X, y, clf, k, bolster=False)
-        srs_bolster[i, :] = sr(X, y, clf, k, bolster=True)
-    min_idx = np.argmin(srs[:, 2], axis=0) + 1
-    min_idx_bolster = np.argmin(srs_bolster[:, 2], axis=0) + 1
-    return (min_idx, min_idx_bolster, srs, srs_bolster)
+        srs[i, :] = sr(X, y, clf_name, k, bolster=False)
+        srs_bolster[i, :] = sr(X, y, clf_name, k, bolster=True)
+    min_idx = np.argmin(srs[:, 2], axis=0)
+    min_idx_bolster = np.argmin(srs_bolster[:, 2], axis=0)
+    return (ks[min_idx], ks[min_idx_bolster], srs, srs_bolster)
+
+
+def test_ms_srm(n=50, d=3, d0=3, clf_name="KNN"):
+    """plot risks for model selection using SRM"""
+    X, y = gen_data(n_samples=n, n_features=d, n_informative=d0,
+                    class_sep=1.5)
+    idx, idx_bolster, srs, srs_bolster = ms_srm(X, y, clf_name)
+    print("idx:", idx)
+    print("idx_bolster:", idx_bolster)
+    print("srs:", srs)
+    print("srs_bolster:", srs_bolster)
 
 
 def _plot_risks(srs, srs_bolster, suptitle, figname=None):
@@ -235,12 +270,19 @@ def _plot_risks(srs, srs_bolster, suptitle, figname=None):
     :param figname:
     """
     d = srs.shape[0]
-    min_idx = np.argmin(srs[:, 2], axis=0) + 1
+
+    # VC dimensions start from 1, in linear case, it is feature size
+    ks = np.arange(1, d+1)
+    #  for KNN, the complexity increases when K decreases.
+    if figname.find("KNN") != -1:
+        ks = np.arange(2*d-1, 0, -2)
+    x = ks
+    min_idx = np.argmin(srs[:, 2], axis=0)
     min_risk = np.min(srs[:, 2])
-    min_idx_bolster = np.argmin(srs_bolster[:, 2], axis=0) + 1
+    min_idx_bolster = np.argmin(srs_bolster[:, 2], axis=0)
     min_risk_bolster = np.min(srs_bolster[:, 2])
 
-    min_idxs = (min_idx_bolster, min_idx)
+    min_idxs = (ks[min_idx_bolster], ks[min_idx])
     min_risks = (min_risk_bolster, min_risk)
 
     srs_tuple = (srs_bolster, srs)
@@ -248,21 +290,28 @@ def _plot_risks(srs, srs_bolster, suptitle, figname=None):
     fig, axes = plt.subplots(2, 1)
     titles = ["structure risk bolstered", "structure risk"]
     # VC dimensions start from 1, in linear case, it is feature size
-    x = np.arange(1, d+1)
+    #  x = np.arange(1, d+1)
+    #  for KNN, the complexity increases when K decreases.
+    #  if figname.find("KNN") != -1:
+    #  x = np.arange(2*d-1, 0, -2)
     for i, ax in enumerate(axes):
         ax.plot(x, srs_tuple[i][:, 0], label="training error")
         ax.plot(x, srs_tuple[i][:, 1], label="vc-confidence")
         ax.plot(x, srs_tuple[i][:, 2], label="bound on error")
-        ax.plot([min_idxs[i], min_idxs[i]], [0, min_risks[i]], 'k--')
-        ax.set_xlim(1, d/2)
+        ax.plot([min_idxs[i], min_idxs[i]], [0, min_risks[i]], 'm--',
+                linewidth=3)
+        #  ax.set_xlim(1, d/2)
+        ax.set_xticks(x)
+        ax.set_xticklabels(x)
         ax.set_title(titles[i])
         if i == 0:
             ax.legend(fontsize='xx-small')
         # Hide the right and top spines
         ax.spines['right'].set_visible(False)
         ax.spines['top'].set_visible(False)
+        ax.spines['left'].set_visible(False)
         # Only show ticks on the left and bottom spines
-        ax.yaxis.set_ticks_position('left')
+        ax.yaxis.set_ticks_position('none')
         ax.xaxis.set_ticks_position('bottom')
     fig.suptitle(suptitle)
     fig.set_tight_layout(True)
@@ -274,10 +323,10 @@ def _plot_risks(srs, srs_bolster, suptitle, figname=None):
 
 def plot_ms_srm(n=50, d=20, d0=3, clf_name="LDA", figname=None):
     """plot risks for model selection using SRM"""
-    clf = choose_clf(clf_name)
+    #  clf = choose_clf(clf_name)
     X, y = gen_data(n_samples=n, n_features=d, n_informative=d0,
                     class_sep=1.5)
-    idx, idx_bolster, srs, srs_bolster = ms_srm(X, y, clf)
+    idx, idx_bolster, srs, srs_bolster = ms_srm(X, y, clf_name)
     if figname is None:
         base_name = base_name_generator(clf_name, n, d, d0)
         figname = srs_figname_gen(base_name)
@@ -295,6 +344,8 @@ def choose_clf(clf_name="LDA"):
         clf = LDA()
     elif clf_name == "LSVM":
         clf = SVC(kernel='linear')
+    elif clf_name == "KNN":
+        clf = KNeighborsClassifier()
     else:
         raise ValueError("Expect clf_name to be LDA or LSVM"
                          ", but found %s" % str(clf_name))
@@ -303,7 +354,7 @@ def choose_clf(clf_name="LDA"):
 
 def loop_ms_srm(n=50, d=20, d0=3, clf_name="LDA", nloop=100, fname=None):
     """Compare model selections using SRM"""
-    clf = choose_clf(clf_name)
+    #  clf = choose_clf(clf_name)
     if fname is None:
         base_name = base_name_generator(clf_name, n, d, d0)
         fname = txt_fname_gen(base_name)
@@ -314,7 +365,7 @@ def loop_ms_srm(n=50, d=20, d0=3, clf_name="LDA", nloop=100, fname=None):
     for i in range(nloop):
         X, y = gen_data(n_samples=n, n_features=d, n_informative=d0,
                         class_sep=1.5)
-        idx, idx_bolster, srs, srs_bolster = ms_srm(X, y, clf)
+        idx, idx_bolster, srs, srs_bolster = ms_srm(X, y, clf_name)
         idx_list[i] = idx
         idx_bolster_list[i] = idx_bolster
         print("In loop %s" % i)
@@ -396,7 +447,7 @@ def read_loop_ms_srm(fname=None, histplot=True, boxplot=True):
 
 def cmp_ms_srm(n=50, d=20, d0=3, clf_name="LDA", nloop=100, figname=None):
     """Compare model selections using SRM, deprecated"""
-    clf = choose_clf(clf_name)
+    #  clf = choose_clf(clf_name)
     if figname is None:
         figname = "hist_clf_{clf}_n_{n}_d_{d}_d0_{d0}.pdf"
         figname = figname.format(clf=clf_name, n=n, d=d, d0=d0)
@@ -405,7 +456,7 @@ def cmp_ms_srm(n=50, d=20, d0=3, clf_name="LDA", nloop=100, figname=None):
     for i in range(nloop):
         X, y = gen_data(n_samples=n, n_features=d, n_informative=d0,
                         class_sep=1.5)
-        idx, idx_bolster, srs, srs_bolster = ms_srm(X, y, clf)
+        idx, idx_bolster, srs, srs_bolster = ms_srm(X, y, clf_name)
         idx_list[i] = idx
         idx_bolster_list[i] = idx_bolster
         print("In loop %s" % i)
@@ -462,18 +513,23 @@ if __name__ == '__main__':
     #  e, e_bolster = cmp_ms_srm(clf_name="LSVM", nloop=100)
     #  print("LSVM: e = {e}\ne_bolster = {e_b}".format(e=e, e_b=e_bolster))
 
-    plot_ms_srm(clf_name="LDA")
-    plot_ms_srm(clf_name="LSVM")
-    plot_ms_srm(d0=4, clf_name="LDA")
-    plot_ms_srm(d0=4, clf_name="LSVM")
+    #  test_ms_srm(clf_name="KNN")
+
+    #  linear classifiers
+    #  plot_ms_srm(clf_name="LDA")
+    #  plot_ms_srm(clf_name="LSVM")
+    #  plot_ms_srm(d0=4, clf_name="LDA")
+    #  plot_ms_srm(d0=4, clf_name="LSVM")
+
+    plot_ms_srm(clf_name="KNN")
 
     #  loop_ms_srm()
     #  loop_ms_srm(clf_name="LSVM")
     #  read_loop_ms_srm()
     #  read_loop_ms_srm(fname="clf_LSVM_n_50_d_20_d0_3.txt")
 
-    runner(n=50, d=20, d0=3, clf_name="LDA", nloop=100, fname=None)
-    runner(n=50, d=20, d0=3, clf_name="LSVM", nloop=100, fname=None)
-    runner(n=50, d=20, d0=4, clf_name="LDA", nloop=100, fname=None)
-    runner(n=50, d=20, d0=4, clf_name="LSVM", nloop=100, fname=None)
+    #  runner(n=50, d=20, d0=3, clf_name="LDA", nloop=100, fname=None)
+    #  runner(n=50, d=20, d0=3, clf_name="LSVM", nloop=100, fname=None)
+    #  runner(n=50, d=20, d0=4, clf_name="LDA", nloop=100, fname=None)
+    #  runner(n=50, d=20, d0=4, clf_name="LSVM", nloop=100, fname=None)
     pass
