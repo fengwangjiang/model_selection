@@ -139,7 +139,7 @@ def sr(X, y, clf_name, k, bolster=False):
         raise ValueError(ve)
     #  X_, y_ = bolstered_blobs(X, y, new_bolster=True)
     X_, y_ = bolstered_blobs(X, y, new_bolster=False)
-    linear_clfs = ["LDA", "LSVM"]
+    linear_clfs = ["LDA", "LSVM", "3NN"]
     if clf_name in linear_clfs:
         vc = k
         selector = SelectKBest(f_classif, k=k).fit(X, y)
@@ -233,7 +233,7 @@ def ms_srm(X, y, clf_name):
     """model selection using structural risk minimization"""
     X, y = check_X_y(X, y)
     n, d = X.shape
-    linear_clfs = ["LDA", "LSVM"]
+    linear_clfs = ["LDA", "LSVM", "3NN"]
     if clf_name in linear_clfs:
         num_ks = np.int(d/2)
         ks = range(1, num_ks+1)
@@ -251,7 +251,7 @@ def ms_srm(X, y, clf_name):
     return (ks[min_idx], ks[min_idx_bolster], srs, srs_bolster)
 
 
-def test_ms_srm(n=50, d=3, d0=3, clf_name="KNN"):
+def test_ms_srm(n=50, d=20, d0=3, clf_name="KNN"):
     """plot risks for model selection using SRM"""
     X, y = gen_data(n_samples=n, n_features=d, n_informative=d0,
                     class_sep=1.5)
@@ -344,6 +344,8 @@ def choose_clf(clf_name="LDA"):
         clf = LDA()
     elif clf_name == "LSVM":
         clf = SVC(kernel='linear')
+    elif clf_name == "3NN":
+        clf = KNeighborsClassifier(n_neighbors=3)
     elif clf_name == "KNN":
         clf = KNeighborsClassifier()
     else:
@@ -497,6 +499,7 @@ def runner(*args, **kwargs):
     base_name = base_name_generator(clf_name, n, d, d0)
     fname = txt_fname_gen(base_name)
     fname = data_abs_path(fname)
+    kwargs['fname'] = fname
     if not os.path.exists(fname):
         loop_ms_srm(**kwargs)
     read_loop_ms_srm(fname=fname)
@@ -518,10 +521,13 @@ if __name__ == '__main__':
     #  linear classifiers
     #  plot_ms_srm(clf_name="LDA")
     #  plot_ms_srm(clf_name="LSVM")
+    #  plot_ms_srm(clf_name="3NN")
     #  plot_ms_srm(d0=4, clf_name="LDA")
     #  plot_ms_srm(d0=4, clf_name="LSVM")
+    #  plot_ms_srm(d0=4, clf_name="3NN")
 
-    plot_ms_srm(clf_name="KNN")
+    #  non-linear classifiers
+    #  plot_ms_srm(clf_name="KNN")
 
     #  loop_ms_srm()
     #  loop_ms_srm(clf_name="LSVM")
@@ -530,6 +536,8 @@ if __name__ == '__main__':
 
     #  runner(n=50, d=20, d0=3, clf_name="LDA", nloop=100, fname=None)
     #  runner(n=50, d=20, d0=3, clf_name="LSVM", nloop=100, fname=None)
+    #  runner(n=50, d=20, d0=3, clf_name="3NN", nloop=100, fname=None)
     #  runner(n=50, d=20, d0=4, clf_name="LDA", nloop=100, fname=None)
     #  runner(n=50, d=20, d0=4, clf_name="LSVM", nloop=100, fname=None)
+    #  runner(n=50, d=20, d0=4, clf_name="3NN", nloop=100, fname=None)
     pass
