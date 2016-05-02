@@ -53,12 +53,12 @@ def cmp_clfs(n=40, d=2, d0=2, data_model=1):
 
     # title for the plots
     titles = ['LDA',
-              'SVC with linear kernel',
-              'SVC with polynomial (degree 2) kernel',
-              'SVC with RBF kernel',
-              'SVC with polynomial (degree 3) kernel',
-              'SVC with polynomial (degree 4) kernel',
-              'SVC with polynomial (degree 5) kernel',
+              'SVM with linear kernel',
+              'SVM with polynomial (degree 2) kernel',
+              'SVM with RBF kernel',
+              'SVM with polynomial (degree 3) kernel',
+              'SVM with polynomial (degree 4) kernel',
+              'SVM with polynomial (degree 5) kernel',
               'Decision tree classifier',
               'KNN with 3 nearest neighbors',
               'KNN with 5 nearest neighbors',
