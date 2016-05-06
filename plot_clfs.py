@@ -11,6 +11,7 @@ from config import data_abs_path, fig_abs_path
 #  from model_selection import strip_filename_suffix
 from model_selection import file_name_parser
 from model_selection import fname2basename
+from matplotlib.colors import LinearSegmentedColormap
 
 
 def cmp_clfs(n=40, d=2, d0=2, data_model=1):
@@ -72,6 +73,20 @@ def cmp_clfs(n=40, d=2, d0=2, data_model=1):
               'KNN with 7 nearest neighbors',
               'KNN with 9 nearest neighbors']
 
+    #  custom blue--->red color map
+
+    cdict = {'red':   ((0.0, 0.0, 0.0),
+                       (1.0, 1.0, 1.0)),
+
+             'green': ((0.0, 0.0, 0.0),
+                       (1.0, 0.0, 0.0)),
+
+             'blue':  ((0.0, 1.0, 1.0),
+                       (1.0, 0.0, 0.0))
+             }
+
+    blue_red = LinearSegmentedColormap('BlueRed1', cdict)
+
     fig = plt.figure()
     fig.subplots_adjust(wspace=0.4, hspace=0.4)
     for i, clf in enumerate((lda, svc, poly_svc2, rbf_svc, poly_svc, poly_svc4,
@@ -85,10 +100,12 @@ def cmp_clfs(n=40, d=2, d0=2, data_model=1):
 
         # Put the result into a color plot
         Z = Z.reshape(xx.shape)
-        ax.contourf(xx, yy, Z, cmap=plt.cm.rainbow, alpha=0.2)
+        #  ax.contourf(xx, yy, Z, cmap=plt.cm.rainbow, alpha=0.2)
+        ax.contourf(xx, yy, Z, cmap=blue_red, alpha=0.2)
 
         # Plot also the training points
-        ax.scatter(X[:, 0], X[:, 1], c=y, cmap=plt.cm.rainbow, alpha=0.5)
+        #  ax.scatter(X[:, 0], X[:, 1], c=y, cmap=plt.cm.rainbow, alpha=0.5)
+        ax.scatter(X[:, 0], X[:, 1], c=y, cmap=blue_red, alpha=0.8)
         # Plot also the bolstered points
         #  ax.scatter(X_[:, 0], X_[:, 1], s=5, c=y_, cmap=plt.cm.rainbow)
         ax.set_xlim(xx.min(), xx.max())
@@ -293,6 +310,6 @@ def run_plot_mean_errs():
 
 
 if __name__ == '__main__':
-    #  run_cmp_clfs()
+    run_cmp_clfs()
     #  run_loop_errs(nloop=100)
-    run_plot_mean_errs()
+    #  run_plot_mean_errs()
