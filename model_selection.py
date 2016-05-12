@@ -110,7 +110,7 @@ def file_name_parser(f_name):
     # ['LDA', '50', '20', '3']
     k = name_list[0::2]
     v = name_list[1::2]
-    v = [x if i == 0 else np.int(x) for i, x in enumerate(v)]
+    v = [x if not x.isdigit() else np.int(x) for x in v]
     # ['LDA', 50, 20, 3]
     name_dict = dict(zip(k, v))
     return name_dict
@@ -503,6 +503,27 @@ def runner(*args, **kwargs):
     if not os.path.exists(fname):
         loop_ms_srm(**kwargs)
     read_loop_ms_srm(fname=fname)
+
+
+def err(X, y, clf, bolster=False):
+    """Calculate (bolstered) error.
+
+    :param X:
+    :param y:
+    :param clf:
+    :param bolster:
+    """
+    n, d = X.shape
+    #  X_, y_ = bolstered_blobs(X, y, new_bolster=True)
+    X_, y_ = bolstered_blobs(X, y, new_bolster=False)
+    clf.fit(X, y)
+    if bolster:
+        err = 1 - clf.score(X_, y_)
+    else:
+        err = 1 - clf.score(X, y)
+    err_bar = np.mean(err)
+    #  print(err_bar)
+    return err_bar
 
 
 if __name__ == '__main__':
