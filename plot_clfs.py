@@ -1,4 +1,5 @@
 import numpy as np
+from scipy import special
 import matplotlib.pyplot as plt
 from sklearn import svm
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
@@ -223,6 +224,116 @@ def read_loop_errs(fname=None):
     return errs
 
 
+def _vc_svm_poly_p(d, p):
+    """VC dimension of SVM
+    with polynomial kernel of degress p in d dimensions"""
+    return special.binom(d + p - 1, p) + 1
+
+
+def _vc_knn(n, k):
+    """VC dimension of kNN
+    with n samples, k nearest neighbors"""
+    #  return n / k / (n ** (1 / 5))
+    return n
+
+
+def calculate_vc_confidence_from_file_name(fname=None):
+    """Calculate VC confidence for classifiers
+    The classifiers are on the first line of file `fname`
+    The parameters are encoded in the file name `fname`
+    It will return a list of VC dimensions for each classifier.
+    """
+
+    #  f = open(fname, 'r')
+    #  header_list = f.readline().strip(' #\n').split('\t')
+    #  f.close()
+
+    if fname is None:
+        fname = "errs_n_40_d_2_d0_2_model_1"
+    f_dict = file_name_parser(fname2basename(fname))
+    print(f_dict)
+    n, d = (f_dict["n"], f_dict["d"])
+    # model, n, d, d0 = f_dict["model"], f_dict["n"], f_dict["d"], f_dict["d0"]
+    vc_lda = d + 1
+    vc_lsvm = d + 1
+    vc_rbf = n
+    vc_poly2 = _vc_svm_poly_p(d, 2)
+    vc_poly3 = _vc_svm_poly_p(d, 3)
+    vc_poly4 = _vc_svm_poly_p(d, 4)
+    vc_poly5 = _vc_svm_poly_p(d, 5)
+    #  depth is 2 for CART, vc = 2 ** depth
+    vc_cart = 2 ** 2
+    vc_3nn = _vc_knn(n, 3)
+    vc_5nn = _vc_knn(n, 5)
+    vc_7nn = _vc_knn(n, 7)
+    vc_9nn = _vc_knn(n, 9)
+    vcs = [vc_lda, vc_lsvm, vc_rbf, vc_poly2, vc_poly3, vc_poly4, vc_poly5,
+           vc_cart, vc_3nn, vc_5nn, vc_7nn, vc_9nn] * 2
+    return 2 * np.log(vcs) / n
+
+
+def plot_mean_errs_plus_complexity(fname, figname=None):
+    """Plot the mean of errors for different classifiers"""
+    errs = read_loop_errs(fname=fname)
+    vc_confidence = calculate_vc_confidence_from_file_name(fname)
+    errs_mean = np.mean(errs, axis=0) + vc_confidence
+    errs_std = np.std(errs, axis=0)
+    with open(fname, 'r') as f:
+        clf_names = f.readline().strip(' #\n').split('\t')
+    #  clf_names = ["LDA", "LSVM", "RBF", "POLY2", "POLY3", "POLY4", "POLY5",
+    #  "CART", "4NN", "5NN", "7NN", "9NN"]
+    num_clf = np.int(len(clf_names) / 2)
+    x = np.arange(1, num_clf+1)
+    y = np.arange(0.0, 0.51, 0.1)
+    resub_mean = errs_mean[:num_clf]
+    bresub_mean = errs_mean[num_clf:]
+    resub_std = errs_std[:num_clf]
+    bresub_std = errs_std[num_clf:]
+    resub_mean_std_min_idx = np.argmin(resub_mean + resub_std)
+    bresub_mean_std_min_idx = np.argmin(bresub_mean + bresub_std)
+    resub_mean_std_min_idx = np.argmin(resub_mean)
+    bresub_mean_std_min_idx = np.argmin(bresub_mean)
+
+    fig, ax = plt.subplots(1, 1, figsize=(8, 3))
+    ax.plot(x, resub_mean, label="resub", ls='--', color='r', marker='o',
+            ms=5, fillstyle='none')
+    ax.plot(x[resub_mean_std_min_idx], resub_mean[resub_mean_std_min_idx],
+            ls='None', color='r', marker='o', ms=5)
+    ax.plot(x, bresub_mean, label="bresub", ls='-', color='b', marker='^',
+            ms=5, fillstyle='none')
+    ax.plot(x[bresub_mean_std_min_idx], bresub_mean[bresub_mean_std_min_idx],
+            ls='None', color='b', marker='^', ms=5)
+    ax.set_xlim(0.5, num_clf + 0.5)
+    #  ax.set_title("resub and bresub error")
+    ax.set_xticks(x)
+    ax.set_xticklabels(clf_names, fontsize='xx-small', rotation=30)
+    ax.set_yticks(y)
+    ax.set_yticklabels(y, fontsize='xx-small')
+    ax.legend(fontsize='xx-small')
+    ax.yaxis.grid(color='grey')
+    # Hide the right and top spines
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    # Only show ticks on the left and bottom spines
+    ax.yaxis.set_ticks_position('none')
+    ax.xaxis.set_ticks_position('none')
+
+    logical_x_range = num_clf    # Bark
+    logical_y_range = 0.6    # dB
+    physical_x_range = 8     # inch
+    physical_y_range = 3  # inch
+    ax.set_aspect(
+        (physical_y_range/logical_y_range) /
+        (physical_x_range/logical_x_range))
+    if figname is None:
+        figname = "penalizederrs_n_40_d_2_d0_2_model_1.pdf"
+    fig.suptitle("resub and bresub error")
+    fig.savefig(figname)
+    plt.close()
+    return errs_mean, errs_std
+
+
 def plot_mean_errs(errs, figname=None):
     """Plot the mean of errors for different classifiers"""
     errs_mean = np.mean(errs, axis=0)
@@ -273,7 +384,7 @@ def plot_mean_errs(errs, figname=None):
     ax.xaxis.set_ticks_position('none')
 
     logical_x_range = num_clf    # Bark
-    logical_y_range = 0.5    # dB
+    logical_y_range = 0.6    # dB
     physical_x_range = 8     # inch
     physical_y_range = 3  # inch
     ax.set_aspect(
@@ -285,6 +396,28 @@ def plot_mean_errs(errs, figname=None):
     fig.savefig(figname)
     plt.close()
     return errs_mean, errs_std
+
+
+def run_plot_mean_errs_plus_complexity():
+    """run plot_mean_errs to plot mean errors."""
+    n = 40
+    d = 2
+    d0 = 2
+    data_models = [1, 2, 3, 4]
+    for dm in data_models:
+        f_name_dict = dict(n=n, d=d, d0=d0, t=dm)
+        base_name = "errs_n_{n}_d_{d}_d0_{d0}_model_{t}".format(**f_name_dict)
+        fname = txt_fname_gen(base_name)
+        fname = data_abs_path(fname)
+
+        figname = "penalized" + base_name + '.pdf'
+        figname = fig_abs_path(figname)
+
+        errs_mean, errs_std = plot_mean_errs_plus_complexity(fname,
+                                                             figname=figname)
+        np.set_printoptions(formatter={'float': '{: 0.3f}'.format})
+        print("errs_mean_plus_complexity:\n{}".format(errs_mean))
+        print("errs_std:\n{}".format(errs_std))
 
 
 def run_plot_mean_errs():
@@ -310,6 +443,9 @@ def run_plot_mean_errs():
 
 
 if __name__ == '__main__':
-    run_cmp_clfs()
+    #  run_cmp_clfs()
     #  run_loop_errs(nloop=100)
     #  run_plot_mean_errs()
+    #  import ipdb as pdb
+    #  pdb.set_trace()
+    run_plot_mean_errs_plus_complexity()
